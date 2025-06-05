@@ -139,6 +139,7 @@ int IP_recv(mic_tcp_pdu* pk, mic_tcp_ip_addr* local_addr, mic_tcp_ip_addr* remot
     if(initialized == -1) {
         return -1;
     }
+    printf("1\n");
 
     /* Compute the number of entire seconds */
     tv.tv_sec = timeout / 1000;
@@ -152,8 +153,11 @@ int IP_recv(mic_tcp_pdu* pk, mic_tcp_ip_addr* local_addr, mic_tcp_ip_addr* remot
     if ((setsockopt(sys_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv))) >= 0) {
        result = recvfrom(sys_socket, buffer, buffer_size, 0, (struct sockaddr *)&tmp_addr, &tmp_addr_size);
     }
+    printf("2\n");
 
     if (result != -1) {
+        printf("3\n");
+
         /* Create the mic_tcp_pdu */
         memcpy (&(pk->header), buffer, API_HD_Size);
         pk->payload.size = result - API_HD_Size;
@@ -165,11 +169,15 @@ int IP_recv(mic_tcp_pdu* pk, mic_tcp_ip_addr* local_addr, mic_tcp_ip_addr* remot
             //remote_addr->addr = "localhost";
             remote_addr->addr_size = strlen(remote_addr->addr) + 1; // don't forget '\0'
         }
+        printf("4\n");
+
 
         if (local_addr != NULL) {
             local_addr->addr = "localhost";
             local_addr->addr_size = strlen(local_addr->addr) + 1; // don't forget '\0'
         }
+        printf("5\n");
+
 
         printf("[MICTCP-CORE] Réception d'un paquet IP de taille %d provenant de %s\n", result, remote_addr->addr);
 
@@ -180,6 +188,8 @@ int IP_recv(mic_tcp_pdu* pk, mic_tcp_ip_addr* local_addr, mic_tcp_ip_addr* remot
 
     /* Free the reception buffer */
     free(buffer);
+    printf("6\n");
+
 
     return result;
 }
