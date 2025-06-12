@@ -1,6 +1,15 @@
 #include <mictcp.h>
 #include <api/mictcp_core.h>
 
+typedef struct { 
+    int *ack_array;
+    int taille_max;
+    int position;
+} FenetreGlissante;
+
+
+
+
 
 // Variable globale
 struct mic_tcp_sock my_sockets[10];
@@ -8,7 +17,50 @@ int num_sock = 0;
 int ports[10];
 int seq[10];
 int seq_num = 0;
-int expected_seq_num = 0;
+float seuil = 0.6;
+int taille_fenetre = 5;
+float pourcentage_perte;
+FenetreGlissante fenetre;
+
+
+
+
+
+// Initialisation de le fenetre
+void init_fenetre(FenetreGlissante *f, int taille_max) {
+    f->ack_array = malloc(sizeof(int) * taille_max);
+    f->taille_max = taille_max;
+    f->position = 0;
+
+    // Pour l'instant on considère que tout est ok
+    for (int i = 0; i < taille_max; i++){
+        f->ack_array[i] = 1;
+    }  
+}
+
+
+// Mise à jour de la fenentre
+float maj_fenetre(FenetreGlissante *f, int ack_recu) {
+    f->ack_array[f->position] = ack_recu;
+    f->position = (f->position + 1) % f->taille_max;
+    
+    int pertes = 0;
+    for (int i = 0; i < f->taille_max; i++) {
+        if (f->ack_array[i] == 0) {
+            pertes ++;
+        }
+    }
+
+    float taux = (float) pertes / f->taille_max;
+    return taux;    
+}
+
+
+// liberation place
+void liberer_fenetre(FenetreGlissante *f){
+    free(f->ack_array);
+} 
+
 
 /*
  * Permet de créer un socket entre l’application et MIC-TCP
@@ -22,7 +74,7 @@ int mic_tcp_socket(start_mode sm)
     if (result < 0){
         return result;
     }
-    set_loss_rate(30);
+    set_loss_rate(40);
 
     my_sockets[num_sock].fd = num_sock;
     my_sockets[num_sock].state = IDLE;
@@ -51,12 +103,19 @@ int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
     if (my_sockets[socket].state != IDLE)
         return -1;
 
+
+    printf("[MIC-TCP] 1\n");
     my_sockets[socket].local_addr.ip_addr.addr = strdup(addr.ip_addr.addr);
+    printf("[MIC-TCP] 2\n");
     my_sockets[socket].local_addr.ip_addr.addr_size = strlen(addr.ip_addr.addr) + 1;
+    printf("[MIC-TCP] 3\n");
     my_sockets[socket].local_addr.port = addr.port;
+    printf("[MIC-TCP] 4\n");
 
     ports[socket] = addr.port;
+    printf("[MIC-TCP] 5\n");
     seq[socket] = 0;
+    printf("[MIC-TCP] 6\n");
 
     return 0;
 }
@@ -88,6 +147,9 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 
     // Associer l'adresse du serveur (distant) au socket
     my_sockets[socket].remote_addr = addr;
+
+    init_fenetre(&fenetre, taille_fenetre);
+
 
     // Mettre à jour l'état du socket si besoin
     my_sockets[socket].state = ESTABLISHED;
@@ -140,15 +202,50 @@ int mic_tcp_send(int mic_sock, char* mesg, int mesg_size)
 
         int result = IP_recv(&ack_pdu, local_ip, remote_ip, 1000);
 
+
+        // // Si le timer n'expire pas 
+        // if (result != -1) {
+
+        //     ack_recu = 1;
+        //     printf("[MIC-TCP] ACK reçu\n");
+
+        // } else {
+        //     printf("[MIC-TCP] Expiration timer\n");
+        //     pourcentage_perte = maj_fenetre(&fenetre, 0);
+
+        //     // il y a trop de perte sur le fenetre glissante donc on abandonne ce pdu
+        //     // donc on arrête de redemander un ack
+        //     if (pourcentage_perte > seuil){
+        //         ack_recu = 1;
+        //     } 
+        // }
+
         // Si le timer n'expire pas et que le numéro de séquence reçu est le bon
         if (result != -1 && ack_pdu.header.ack_num == seq[mic_sock]) {
             ack_recu = 1;
+            maj_fenetre(&fenetre, 1);
             printf("[MIC-TCP] ACK reçu\n");
 
         } else if (result == -1) {
             printf("[MIC-TCP] Expiration timer\n");
+            pourcentage_perte = maj_fenetre(&fenetre, 0);
+
+            // il y a trop de perte sur le fenetre glissante donc on abandonne ce pdu
+            // donc on arrête de redemander un ack
+            if (pourcentage_perte > seuil){
+                ack_recu = 1;
+                printf("[MIC-TCP] Trop de perte abandon du pdu\n");
+            } 
         } else {
             printf("[MIC-TCP] Mauvais num de seq recu %d\n", ack_pdu.header.ack_num);
+            pourcentage_perte = maj_fenetre(&fenetre, 0);
+
+            // il y a trop de perte sur le fenetre glissante donc on abandonne ce pdu
+            // donc on arrête de redemander un ack
+            if (pourcentage_perte > seuil){
+                ack_recu = 1;
+                printf("[MIC-TCP] Trop de perte abandon du pdu\n");
+            } 
         }
     }
 
@@ -197,6 +294,8 @@ int mic_tcp_close (int socket)
 
     free(my_sockets[socket].local_addr.ip_addr.addr);
     free(my_sockets[socket].remote_addr.ip_addr.addr);
+
+    liberer_fenetre(&fenetre);
 
     printf("[MIC-TCP] Socket fermé correctement\n");
     return 0;
