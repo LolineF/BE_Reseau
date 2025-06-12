@@ -9,11 +9,6 @@ int ports[10];
 int seq_num = 0;
 int expected_seq_num = 0;
 
-#define taille_fenetre  10  // on va regarder à chaque fois les 10 derniers paquets
-int total_sent = 0;
-int total_lost=0;
-
-
 /*
  * Permet de créer un socket entre l’application et MIC-TCP
  * Retourne le descripteur du socket ou bien -1 en cas d'erreur
@@ -128,69 +123,37 @@ int mic_tcp_send(int mic_sock, char* mesg, int mesg_size)
     pdu.payload.data = mesg;
     pdu.payload.size = mesg_size;
 
-    
-    mic_tcp_ip_addr remote_ip = my_sockets[mic_sock].remote_addr.ip_addr;
-    mic_tcp_ip_addr local_ip = my_sockets[mic_sock].local_addr.ip_addr;
+    int ack_recu = 0;
 
-    // mic_tcp_ip_addr remote_ip;
-    // remote_ip.addr = malloc(100);
-    // remote_ip.addr_size = 100;
+    mic_tcp_ip_addr remote_ip;
+    remote_ip.addr = malloc(100);
+    remote_ip.addr_size = 100;
 
-    // strcpy(remote_ip.addr, my_sockets[mic_sock].remote_addr.ip_addr.addr);
-    // remote_ip.addr_size = my_sockets[mic_sock].remote_addr.ip_addr.addr_size;
+    strcpy(remote_ip.addr, my_sockets[mic_sock].remote_addr.ip_addr.addr);
+    remote_ip.addr_size = my_sockets[mic_sock].remote_addr.ip_addr.addr_size;
 
-    // mic_tcp_ip_addr local_ip;
-    // local_ip.addr = malloc(100);
-    // local_ip.addr_size = 100;
+    mic_tcp_ip_addr local_ip;
+    local_ip.addr = malloc(100);
+    local_ip.addr_size = 100;
 
-    // strcpy(local_ip.addr, my_sockets[mic_sock].local_addr.ip_addr.addr);
-    // local_ip.addr_size = my_sockets[mic_sock].local_addr.ip_addr.addr_size;
+    strcpy(local_ip.addr, my_sockets[mic_sock].local_addr.ip_addr.addr);
+    local_ip.addr_size = my_sockets[mic_sock].local_addr.ip_addr.addr_size;
 
-    int tentatives = 0;
-    int ack_recu=0;
-    mic_tcp_pdu ack_pdu;
-
-    while (!ack_recu && tentatives <5) {
+    while (!ack_recu) {
         IP_send(pdu, my_sockets[mic_sock].remote_addr.ip_addr);
-        
+        mic_tcp_pdu ack_pdu;
 
         int result = IP_recv(&ack_pdu, &local_ip, &remote_ip, 100000);
 
         if (result >= 0 && ack_pdu.header.ack == 1 && ack_pdu.header.ack_num == seq_num) {
-            ack_recu = 1;  // ACK recu correct
-        }else{
-            tentatives++;
+            ack_recu = 1;
         }
     }
-    // on s'occupe maintenant de la gestion de la fiabilité partielle
-    // total_sent++;
-    // if(!ack_recu){
-    //     total_lost ++;
-    //     float ratio = (float)total_lost /total_sent;
-
-    //     if(ratio >0.2){ 
-    //         printf("[MIC-TCP] Perte NON tolérée (%.2f > 0.2) → retransmission forcée pour le paquet #%d\n", ratio, seq_num);
-    //         // perte non tolerable 20%
-    //         while (!ack_recu){
-    //             IP_send(pdu, my_sockets[mic_sock].remote_addr.ip_addr);
-    //             int result = IP_recv(&ack_pdu, &local_ip, &remote_ip, 100000);
-    //             if (result >= 0 && ack_pdu.header.ack == 1 && ack_pdu.header.ack_num == seq_num) {
-    //                 ack_recu = 1;
-
-    //             }
-    //         }
-
-    //     }else{
-    //         ack_recu = 1;
-    //         printf("[MIC-TCP] Perte tolérée (%.2f ≤ 0.2) pour le paquet #%d\n", ratio, seq_num);
-    //     }
-    // }
 
     seq_num ++;
 
     return mesg_size;
 }
-
 
 
 
