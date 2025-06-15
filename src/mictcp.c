@@ -9,8 +9,6 @@ typedef struct {
 
 
 
-
-
 // Variable globale
 struct mic_tcp_sock my_sockets[10];
 int num_sock = 0;
@@ -21,7 +19,6 @@ float seuil = 0.6;
 int taille_fenetre = 5;
 float pourcentage_perte;
 FenetreGlissante fenetre;
-
 
 
 
@@ -37,6 +34,7 @@ void init_fenetre(FenetreGlissante *f, int taille_max) {
         f->ack_array[i] = 1;
     }  
 }
+
 
 
 // Mise à jour de la fenentre
@@ -82,6 +80,8 @@ int mic_tcp_socket(start_mode sm)
     // Allocation dynamique de l'adresse IP
     my_sockets[num_sock].local_addr.ip_addr.addr = strdup("127.0.0.1");
     my_sockets[num_sock].local_addr.ip_addr.addr_size = strlen(my_sockets[num_sock].local_addr.ip_addr.addr) + 1;
+    ports[num_sock] = 9000;
+    my_sockets[num_sock].local_addr.port = ports[num_sock];
 
     seq[num_sock] = 0;
     
@@ -100,22 +100,13 @@ int mic_tcp_bind(int socket, mic_tcp_sock_addr addr)
 {
     printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
 
-    if (my_sockets[socket].state != IDLE)
+    if (my_sockets[socket].state != IDLE) {
         return -1;
+    } 
 
-
-    printf("[MIC-TCP] 1\n");
-    my_sockets[socket].local_addr.ip_addr.addr = strdup(addr.ip_addr.addr);
-    printf("[MIC-TCP] 2\n");
-    my_sockets[socket].local_addr.ip_addr.addr_size = strlen(addr.ip_addr.addr) + 1;
-    printf("[MIC-TCP] 3\n");
+    my_sockets[socket].local_addr.ip_addr = addr.ip_addr;
     my_sockets[socket].local_addr.port = addr.port;
-    printf("[MIC-TCP] 4\n");
-
     ports[socket] = addr.port;
-    printf("[MIC-TCP] 5\n");
-    seq[socket] = 0;
-    printf("[MIC-TCP] 6\n");
 
     return 0;
 }
@@ -132,6 +123,13 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
 
     my_sockets[socket].state = ESTABLISHED;
 
+    my_sockets[socket].remote_addr.ip_addr.addr = strdup("127.0.0.1");
+    my_sockets[socket].remote_addr.ip_addr.addr_size = strlen(my_sockets[socket].remote_addr.ip_addr.addr) + 1;
+    my_sockets[socket].remote_addr.port = 9000;
+
+    addr->ip_addr = my_sockets[socket].remote_addr.ip_addr;
+    addr->port = my_sockets[socket].remote_addr.port;
+
     return 0;
 }
 
@@ -146,10 +144,10 @@ int mic_tcp_accept(int socket, mic_tcp_sock_addr* addr)
     printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
 
     // Associer l'adresse du serveur (distant) au socket
-    my_sockets[socket].remote_addr = addr;
+    my_sockets[socket].remote_addr.ip_addr = addr.ip_addr;
+    my_sockets[socket].remote_addr.port = addr.port;
 
     init_fenetre(&fenetre, taille_fenetre);
-
 
     // Mettre à jour l'état du socket si besoin
     my_sockets[socket].state = ESTABLISHED;
@@ -191,8 +189,8 @@ int mic_tcp_send(int mic_sock, char* mesg, int mesg_size)
 
     int ack_recu = 0;
 
-    struct mic_tcp_ip_addr *remote_ip = &my_sockets[mic_sock].remote_addr.ip_addr;
     struct mic_tcp_ip_addr *local_ip = &my_sockets[mic_sock].local_addr.ip_addr;
+    struct mic_tcp_ip_addr *remote_ip = &my_sockets[mic_sock].remote_addr.ip_addr;
 
     while (!ack_recu) {
         IP_send(pdu, my_sockets[mic_sock].remote_addr.ip_addr);
@@ -202,54 +200,29 @@ int mic_tcp_send(int mic_sock, char* mesg, int mesg_size)
 
         int result = IP_recv(&ack_pdu, local_ip, remote_ip, 1000);
 
-
-        // // Si le timer n'expire pas 
-        // if (result != -1) {
-
-        //     ack_recu = 1;
-        //     printf("[MIC-TCP] ACK reçu\n");
-
-        // } else {
-        //     printf("[MIC-TCP] Expiration timer\n");
-        //     pourcentage_perte = maj_fenetre(&fenetre, 0);
-
-        //     // il y a trop de perte sur le fenetre glissante donc on abandonne ce pdu
-        //     // donc on arrête de redemander un ack
-        //     if (pourcentage_perte > seuil){
-        //         ack_recu = 1;
-        //     } 
-        // }
-
-        // Si le timer n'expire pas et que le numéro de séquence reçu est le bon
-        if (result != -1 && ack_pdu.header.ack_num == seq[mic_sock]) {
-            ack_recu = 1;
-            maj_fenetre(&fenetre, 1);
-            printf("[MIC-TCP] ACK reçu\n");
-
-        } else if (result == -1) {
-            printf("[MIC-TCP] Expiration timer\n");
-            pourcentage_perte = maj_fenetre(&fenetre, 0);
-
-            // il y a trop de perte sur le fenetre glissante donc on abandonne ce pdu
-            // donc on arrête de redemander un ack
-            if (pourcentage_perte > seuil){
+        if(result != -1){
+            if(ack_pdu.header.ack_num == seq[mic_sock]+1) {
                 ack_recu = 1;
-                printf("[MIC-TCP] Trop de perte abandon du pdu\n");
+                maj_fenetre(&fenetre, 1);
+                printf("[MIC-TCP] ACK reçu\n");
+                seq[mic_sock] ++;
+            } else {
+                maj_fenetre(&fenetre, 0);
+                printf("[MIC-TCP] ACK reçu mais mauvais num de seq recu %d, (voulu %d)\n", ack_pdu.header.ack_num,seq[mic_sock]+1);
             } 
+        
         } else {
-            printf("[MIC-TCP] Mauvais num de seq recu %d\n", ack_pdu.header.ack_num);
             pourcentage_perte = maj_fenetre(&fenetre, 0);
 
-            // il y a trop de perte sur le fenetre glissante donc on abandonne ce pdu
-            // donc on arrête de redemander un ack
             if (pourcentage_perte > seuil){
                 ack_recu = 1;
+                printf("[MIC-TCP] Expiration timer\n");
                 printf("[MIC-TCP] Trop de perte abandon du pdu\n");
+            } else {
+                printf("[MIC-TCP] Expiration timer et renvoie\n");
             } 
-        }
+        } 
     }
-
-    seq[mic_sock] ++;
 
     return mesg_size;
 }
@@ -313,10 +286,17 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
 {
     printf("[MIC-TCP] Appel de la fonction: %s\n", __FUNCTION__);
 
+    if (pdu.header.seq_num != seq[num_sock]){
+        printf("[MIC-TCP] Paquet hors séquence donc déjà reçu (attendu=%d, reçu=%d), ignoré\n",seq[num_sock], pdu.header.seq_num);
+    } else {
+        app_buffer_put(pdu.payload);
+        seq[num_sock] ++;
+    }
+
     mic_tcp_pdu ack_pdu;
 
     ack_pdu.header.seq_num = 0;
-    ack_pdu.header.ack_num = pdu.header.seq_num;
+    ack_pdu.header.ack_num = seq[num_sock];
     ack_pdu.header.dest_port = pdu.header.source_port;
     ack_pdu.header.source_port = pdu.header.dest_port;
     ack_pdu.header.syn = 0;
@@ -327,12 +307,7 @@ void process_received_PDU(mic_tcp_pdu pdu, mic_tcp_ip_addr local_addr, mic_tcp_i
     ack_pdu.payload.data = NULL;
     ack_pdu.payload.size = 0;
 
-    if (pdu.header.seq_num != seq[num_sock]){
-        printf("[MIC-TCP] Paquet hors séquence donc déjà reçu (attendu=%d, reçu=%d), ignoré\n",seq[num_sock], pdu.header.seq_num);
-    } else {
-        app_buffer_put(pdu.payload);
-        seq[num_sock] ++;
-    }
-    printf("[MIC-TCP] ack_num envoyé : %d\n",ack_pdu.header.ack_num);
+    // printf("[MIC-TCP] ack_num envoyé : %d\n",ack_pdu.header.ack_num);
     IP_send(ack_pdu, remote_addr);
+
 }
