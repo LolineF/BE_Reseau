@@ -3,6 +3,36 @@
 
 Les détails du sujet du BE est accessible depuis le cours "Programmation Système et Réseau" sur moodle.
 
+## 👥 Auteurs
+
+Ce projet a été réalisé dans le cadre du BE Réseaux à l’INSA Toulouse, par :
+
+- **Loline Fornalik** – LolineF
+- **Annalisa Josse** – AnnaLisa18
+
+Encadré par l’équipe pédagogique du département Informatique et Réseaux.
+
+## 📌 Avancement par version
+
+### ✅ MICTCP-v1 — Transfert sans garantie de fiabilité
+- Envoi simple de données sans retransmission
+- Pas de gestion d’ACK, ni de vérification d’arrivée des paquets
+
+### ✅ MICTCP-v2 — Fiabilité complète (Stop-and-Wait)
+- Réémission du PDU si aucun ACK reçu
+- Attente active d’un accusé de réception avant d’envoyer le suivant
+- Utilisation d’un numéro de séquence attendu
+
+### ✅ MICTCP-v3 — Fiabilité partielle avec seuil + fenêtre glissante
+- Introduction d’un seuil statique (ex. : seuil = 0.6)
+- Mécanisme de fenêtre glissante pour suivre les derniers ACK reçus
+- Si le taux de pertes observé est inférieure au seuil → retransmission
+- Sinon → pas de réémission pour améliorer les performances
+- **Remarque :** le protocole fonctionne correctement avec tsock_texte, mais tsock_video pose encore problème et ne marche pas à chaque fois.
+
+### 🟢 MICTCP-v4.1 — Ajout du mécanisme de connexion
+- Implémentation de mic_tcp_connect / mic_tcp_accept avec échanges SYN / SYN-ACK / ACK  
+
 
 ## Contenu du dépôt « template » fourni
 Ce dépôt inclut le code source initial fourni pour démarrer le BE. Plus précisément : 
