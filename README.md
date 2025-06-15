@@ -10,6 +10,7 @@ Ce projet a été réalisé dans le cadre du BE Réseaux à l’INSA Toulouse, p
 - **Loline Fornalik** – LolineF
 - **Annalisa Josse** – AnnaLisa18
 
+(Tous les commits proviennent d'un même compte car nous avons toujours coder ensemble depuis le même compte)
 Encadré par l’équipe pédagogique du département Informatique et Réseaux.
 
 ## 📌 Avancement par version
